@@ -1,6 +1,6 @@
 kind = "web"
-previewPath = "/"
-title = "ShoulderSim AI"
+previewPath = "/shouldersim-old/"
+title = "ShoulderSim AI (old)"
 version = "1.0.0"
 id = "artifacts/shouldersim"
 router = "path"
@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/shouldersim-old/" ]
 localPort = 21120
 
 [services.development]
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "21120"
-BASE_PATH = "/"
+BASE_PATH = "/shouldersim-old/"
