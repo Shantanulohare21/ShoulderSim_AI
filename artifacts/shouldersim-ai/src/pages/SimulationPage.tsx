@@ -1,11 +1,12 @@
-import { useState } from "react";
+
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import {
   Activity, ArrowLeft, Save, Download, Play, Pause,
   Brain, AlertTriangle, TrendingUp, Clock, ChevronRight, Sliders,
   Target, FileText, Zap, Layers, Check, Info,
-  RefreshCw, User, Mic, MicOff, AlertCircle, Thermometer
+  RefreshCw, User, Mic, MicOff, AlertCircle, Thermometer,
+  Shield, Wrench
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
@@ -33,119 +34,883 @@ const recoveryData = [
   { week: "52", rom: 140, pain: 3, strength: 95 },
 ];
 
-function ShoulderSimViewer({ layers, motionVals, heatmap, planning, simulationRunning }: {
-  layers: Set<LayerKey>; motionVals: MotionValues; heatmap: boolean; planning: PlanningValues; simulationRunning: boolean;
+import { Canvas, useFrame } from "@react-three/fiber";
+import { OrbitControls, Line as ThreeLine, Grid } from "@react-three/drei";
+import * as THREE from "three";
+import { useState, useEffect } from "react";
+
+// Stability testing component
+function StabilityTab({ planning }: { planning: PlanningValues }) {
+  // Simple metric based on deviation from optimal angles
+  const deviation = Math.abs(planning.angle - 135) + Math.abs(planning.anteversion - 20);
+  const stabilityScore = Math.max(0, 100 - deviation * 2);
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-medium text-primary">Stability Assessment</h4>
+      <p className="text-xs text-muted-foreground">Higher score indicates better implant stability under simulated loads.</p>
+      <div className="w-full bg-secondary h-2 rounded-full overflow-hidden"><div className="bg-primary h-full" style={{ width: `${stabilityScore}%` }} /></div>
+      <div className="text-center text-sm font-bold" style={{ color: stabilityScore > 80 ? '#22c55e' : stabilityScore > 50 ? '#eab308' : '#ef4444' }}>
+        {Math.round(stabilityScore)}% Stability
+      </div>
+    </div>
+  );
+}
+
+// Wear simulation component
+function WearSimulationTab({ planning }: { planning: PlanningValues }) {
+  // Simulate wear progression over time based on implant depth and offset
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgress(p => Math.min(100, p + 0.5));
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+  const wearFactor = (planning.depth / 40) + (Math.abs(planning.offset) / 20);
+  const wearLevel = Math.min(100, progress * wearFactor);
+  return (
+    <div className="space-y-4">
+      <h4 className="text-sm font-medium text-primary">Implant Wear Simulation</h4>
+      <div className="w-full bg-secondary h-2 rounded-full overflow-hidden"><div className="bg-primary h-full" style={{ width: `${wearLevel}%` }} /></div>
+      <p className="text-xs text-muted-foreground">Wear increases over simulated time; higher depth/offset accelerates wear.</p>
+    </div>
+  );
+}
+
+// Procedural 3D Scapula component
+function ScapulaMesh({ layers, planning, stressLevel, heatmap }: { layers: Set<LayerKey>; planning: PlanningValues; stressLevel: number; heatmap: boolean }) {
+  if (!layers.has("bones")) return null;
+
+  // Glenosphere placement based on inclination & anteversion planning parameters
+  const inclinationRad = ((planning.angle - 135) * Math.PI) / 180;
+  const anteversionRad = ((planning.anteversion - 20) * Math.PI) / 180;
+
+  // High-stress color indicator
+  const stressColor = stressLevel < 0.3 ? "#22c55e" : stressLevel < 0.6 ? "#eab308" : "#ef4444";
+
+  return (
+    <group position={[-1.2, 0, 0]}>
+      {/* Scapula Body (procedural wing shape) */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.5, 2, 0.15]} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.7} metalness={0.1} wireframe={false} />
+      </mesh>
+
+      {/* Glenoid Neck */}
+      <mesh position={[0.8, 0.2, 0]} rotation={[0, 0, -0.2]}>
+        <cylinderGeometry args={[0.3, 0.5, 0.8, 16]} />
+        <meshStandardMaterial color="#94a3b8" roughness={0.8} />
+      </mesh>
+
+      {/* Glenoid Socket / Baseplate */}
+      <group position={[1.1, 0.3, 0]} rotation={[0, anteversionRad, inclinationRad]}>
+        {/* Glenoid Bone base */}
+        <mesh castShadow>
+          <cylinderGeometry args={[0.45, 0.45, 0.2, 32]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.6} />
+        </mesh>
+
+        {/* Cartilage layer */}
+        {layers.has("cartilage") && (
+          <mesh position={[0, 0.11, 0]}>
+            <cylinderGeometry args={[0.47, 0.47, 0.05, 32]} />
+            <meshStandardMaterial color="#86efac" transparent opacity={0.6} roughness={0.2} />
+          </mesh>
+        )}
+
+        {/* Implant Glenosphere */}
+        {layers.has("implant") && (
+          <group position={[0, 0.15, 0]}>
+            <mesh castShadow>
+              <sphereGeometry args={[0.4, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial color="#06b6d4" roughness={0.2} metalness={0.8} />
+            </mesh>
+            {/* Glenoid cup stress heatmap indicator */}
+            {heatmap && (
+              <mesh position={[0, 0.02, 0]}>
+                <sphereGeometry args={[0.41, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshBasicMaterial color={stressColor} transparent opacity={0.4} wireframe />
+              </mesh>
+            )}
+          </group>
+        )}
+      </group>
+    </group>
+  );
+}
+
+// Procedural 3D Humerus & Stem component
+function HumerusMesh({
+  layers,
+  motionVals,
+  planning,
+  simulationRunning,
+}: {
+  layers: Set<LayerKey>;
+  motionVals: MotionValues;
+  planning: PlanningValues;
+  simulationRunning: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  // Apply real-time kinematic calculations inside the animation frame
+  useFrame((state) => {
+    if (!groupRef.current) return;
+    
+    // Joint rotation angles based on ROM sliders + optional micro-motion if sim running
+    let flex = motionVals.flexion;
+    let abd = motionVals.abduction;
+    let rot = motionVals.rotation;
+    let ext = motionVals.extension;
+
+    if (simulationRunning) {
+      const time = state.clock.getElapsedTime();
+      flex += Math.sin(time * 2.5) * 12;
+      abd += Math.cos(time * 2.0) * 10;
+    }
+
+    // Convert to radians
+    const rotX = (flex * Math.PI) / 180;
+    const rotY = (rot * Math.PI) / 180;
+    const rotZ = ((abd - ext) * Math.PI) / 180;
+
+    groupRef.current.rotation.set(-rotX, rotY, -rotZ);
+  });
+
+  if (!layers.has("bones")) return null;
+
+  // Implant offset configuration
+  const humeralOffset = planning.offset / 10;
+
+  return (
+    <group ref={groupRef} position={[0.3, -0.3, 0]}>
+      {/* Humeral Shaft */}
+      <mesh position={[0, -1.2, 0]} castShadow>
+        <cylinderGeometry args={[0.35, 0.28, 2.0, 16]} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.7} />
+      </mesh>
+
+      {/* Humeral Head / Joint Interface */}
+      <group position={[humeralOffset, 0, 0]}>
+        <mesh position={[0, -0.1, 0]} castShadow>
+          <sphereGeometry args={[0.48, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.5} />
+        </mesh>
+
+        {/* Humeral Implant Stem & Cup */}
+        {layers.has("implant") && (
+          <group position={[0, -0.15, 0]}>
+            {/* Implant Stem (inside bone) */}
+            <mesh position={[0, -0.4, 0]}>
+              <cylinderGeometry args={[0.15, 0.08, 0.9, 16]} />
+              <meshStandardMaterial color="#06b6d4" roughness={0.3} metalness={0.9} transparent opacity={0.6} />
+            </mesh>
+            {/* Humeral Cup interface */}
+            <mesh position={[0, 0.1, 0]} castShadow>
+              <cylinderGeometry args={[0.49, 0.44, 0.15, 32]} />
+              <meshStandardMaterial color="#0891b2" roughness={0.1} metalness={0.9} />
+            </mesh>
+          </group>
+        )}
+      </group>
+    </group>
+  );
+}
+
+// Procedural Musculoskeletal, Tendon, and Nerve layers
+function SoftTissueLayers({ layers, motionVals }: { layers: Set<LayerKey>; motionVals: MotionValues }) {
+  if (!layers.has("muscles") && !layers.has("tendons") && !layers.has("nerves")) return null;
+
+  // Calculate dynamic line positions for attachments
+  const abdRad = (motionVals.abduction * Math.PI) / 180;
+  const flexRad = (motionVals.flexion * Math.PI) / 180;
+
+  // Humerus attachment point updates dynamically based on rotation
+  const humAttachY = -0.3 - Math.sin(abdRad) * 0.5;
+  const humAttachX = 0.3 + Math.cos(abdRad) * 0.4;
+  const humAttachZ = Math.sin(flexRad) * 0.3;
+
+  return (
+    <group>
+      {/* Supraspinatus Muscle (delivers muscle force) */}
+      {layers.has("muscles") && (
+        <ThreeLine
+          points={[[-1.2, 0.8, 0], [-0.5, 0.6, 0.1], [humAttachX, humAttachY + 0.3, humAttachZ]]}
+          color="#3b82f6"
+          lineWidth={4}
+        />
+      )}
+
+      {/* Infraspinatus Tendon Pathway */}
+      {layers.has("tendons") && (
+        <ThreeLine
+          points={[[-1.0, -0.6, 0.4], [humAttachX, humAttachY, humAttachZ + 0.2]]}
+          color="#fbbf24"
+          lineWidth={2.5}
+        />
+      )}
+
+      {/* Brachial Plexus Nerves Route */}
+      {layers.has("nerves") && (
+        <group>
+          <ThreeLine
+            points={[[-1.5, 1.2, -0.2], [-0.8, 0.1, -0.4], [0.1, -1.0, -0.3]]}
+            color="#faccc9"
+            lineWidth={1.5}
+          />
+          <ThreeLine
+            points={[[-1.5, 1.2, -0.2], [-0.6, -0.2, 0.2], [0.3, -1.2, 0.1]]}
+            color="#eab308"
+            lineWidth={1.2}
+          />
+        </group>
+      )}
+    </group>
+  );
+}
+
+// Custom 2D Multi-Planar Reconstruction (MPR) CT Slice Viewer
+import { useEffect, useState } from "react";
+
+function CtSliceViewer({
+  sliceIndex,
+  planning,
+  layers,
+}: {
+  sliceIndex: number;
+  planning: PlanningValues;
+  layers: Set<LayerKey>;
+}) {
+  const axialRef = useRef<HTMLCanvasElement>(null);
+  const coronalRef = useRef<HTMLCanvasElement>(null);
+  const sagittalRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const drawSlice = (
+      canvas: HTMLCanvasElement | null,
+      type: "axial" | "coronal" | "sagittal"
+    ) => {
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Draw medical black-grey backdrop
+      ctx.fillStyle = "#0c111d";
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw target grid overlay
+      ctx.strokeStyle = "rgba(6, 182, 212, 0.15)";
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < w; i += 20) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, h);
+        ctx.stroke();
+      }
+      for (let j = 0; j < h; j += 20) {
+        ctx.beginPath();
+        ctx.moveTo(0, j);
+        ctx.lineTo(w, j);
+        ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+
+      // Dynamic geometry based on slice index (depth simulator)
+      const depthScale = Math.max(0.2, 1.0 - Math.abs(sliceIndex - 64) / 100);
+      const angleRad = ((planning.angle - 135) * Math.PI) / 180;
+      const anteRad = ((planning.anteversion - 20) * Math.PI) / 180;
+
+      if (type === "axial") {
+        // AXIAL VIEW: cross-section of humerus shaft and glenoid
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.75)";
+        ctx.lineWidth = 2.0;
+
+        // Scapula neck cross section
+        ctx.beginPath();
+        ctx.moveTo(-70, -10);
+        ctx.quadraticCurveTo(-30, -5, -15, -15);
+        ctx.lineTo(-10, 20);
+        ctx.quadraticCurveTo(-45, 10, -70, -10);
+        ctx.stroke();
+
+        // Glenoid base outline (impacted by anteversion planning)
+        ctx.save();
+        ctx.rotate(anteRad);
+        ctx.beginPath();
+        ctx.ellipse(-8, 5, 10, 25, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Humerus head cross-section
+        ctx.beginPath();
+        ctx.arc(30 + planning.offset, 5, 26 * depthScale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Implant stem (if layer active)
+        if (layers.has("implant")) {
+          ctx.strokeStyle = "#06b6d4";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(30 + planning.offset, 5, 10 * depthScale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      } else if (type === "coronal") {
+        // CORONAL VIEW: Humerus shaft extending down + glenoid profile
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.75)";
+        ctx.lineWidth = 2.0;
+
+        // Scapula wing
+        ctx.beginPath();
+        ctx.moveTo(-50, -60);
+        ctx.lineTo(-40, 40);
+        ctx.lineTo(-20, 10);
+        ctx.lineTo(-50, -60);
+        ctx.stroke();
+
+        // Glenoid inclined socket
+        ctx.save();
+        ctx.translate(-15, 0);
+        ctx.rotate(angleRad);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 8, 30, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (layers.has("implant")) {
+          // Glenosphere outline
+          ctx.fillStyle = "rgba(6, 182, 212, 0.25)";
+          ctx.strokeStyle = "#06b6d4";
+          ctx.beginPath();
+          ctx.arc(6, 0, 15, -Math.PI / 2, Math.PI / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Humerus shaft and head
+        ctx.beginPath();
+        ctx.arc(28 + planning.offset, 0, 28 * depthScale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(15 + planning.offset, 15);
+        ctx.lineTo(15 + planning.offset, 70);
+        ctx.lineTo(41 + planning.offset, 70);
+        ctx.lineTo(41 + planning.offset, 15);
+        ctx.stroke();
+      } else if (type === "sagittal") {
+        // SAGITTAL VIEW: Circular glenoid socket projection
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.75)";
+        ctx.lineWidth = 2.0;
+
+        // Glenoid circle profile
+        ctx.beginPath();
+        ctx.ellipse(-15, 0, 22 * depthScale, 30 * depthScale, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Humerus head circle offset
+        ctx.beginPath();
+        ctx.arc(25 + planning.offset, 0, 28, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (layers.has("implant")) {
+          // Inner implant stem projection circle
+          ctx.strokeStyle = "#06b6d4";
+          ctx.beginPath();
+          ctx.arc(-15, 0, 14, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+
+      // Top label indicators
+      ctx.fillStyle = "rgba(6, 182, 212, 0.8)";
+      ctx.font = "bold 9px monospace";
+      ctx.fillText(`${type.toUpperCase()} VIEW`, 8, 14);
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillText(`Slice: ${sliceIndex}/128`, 8, 25);
+    };
+
+    drawSlice(axialRef.current, "axial");
+    drawSlice(coronalRef.current, "coronal");
+    drawSlice(sagittalRef.current, "sagittal");
+  }, [sliceIndex, planning, layers]);
+
+  return (
+    <div className="grid grid-cols-3 gap-2 h-full w-full">
+      {["axial", "coronal", "sagittal"].map((type, i) => (
+        <div key={type} className="relative rounded-lg overflow-hidden border border-border/40">
+          <canvas
+            ref={i === 0 ? axialRef : i === 1 ? coronalRef : sagittalRef}
+            width={160}
+            height={280}
+            className="w-full h-full block"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 3D Collision Detection and Impingement Visualizer
+function ImpingementIndicator({ motionVals }: { motionVals: MotionValues }) {
+  // If adduction (low abduction) or high flexion exceeds safety margins, render impingement sphere
+  const isImpingement = motionVals.abduction < 20 || motionVals.flexion > 135;
+  if (!isImpingement) return null;
+
+  // Position of contact point between scapula and humeral neck
+  const contactPos: [number, number, number] = motionVals.abduction < 20 ? [-0.2, 0.05, 0.05] : [0.1, 0.25, 0.15];
+
+  return (
+    <group position={contactPos}>
+      {/* Pulsing red collision sphere */}
+      <mesh>
+        <sphereGeometry args={[0.08, 16, 16]} />
+        <meshBasicMaterial color="#ef4444" transparent opacity={0.7} />
+      </mesh>
+      <mesh scale={[1.4, 1.4, 1.4]}>
+        <sphereGeometry args={[0.08, 16, 16]} />
+        <meshBasicMaterial color="#ef4444" transparent opacity={0.2} wireframe />
+      </mesh>
+    </group>
+  );
+}
+
+// Dynamic 3D Force Vectors Component
+function ForceVectors({ motionVals }: { motionVals: MotionValues }) {
+  const abdRad = (motionVals.abduction * Math.PI) / 180;
+  const jointForceMag = Math.max(0.3, 0.8 + Math.sin(abdRad) * 0.8);
+  const isHighLoad = jointForceMag > 1.25;
+
+  return (
+    <group>
+      {/* Joint Reaction Force Vector (exiting glenosphere center) */}
+      <group position={[-0.1, 0.3, 0]} rotation={[0, 0, -1.1 + abdRad * 0.5]}>
+        {/* Shaft of the Arrow */}
+        <mesh position={[0, jointForceMag / 2, 0]}>
+          <cylinderGeometry args={[0.025, 0.025, jointForceMag, 8]} />
+          <meshBasicMaterial color={isHighLoad ? "#ef4444" : "#06b6d4"} />
+        </mesh>
+        {/* Tip of the Arrow */}
+        <mesh position={[0, jointForceMag + 0.05, 0]} rotation={[0, 0, 0]}>
+          <coneGeometry args={[0.07, 0.15, 8]} />
+          <meshBasicMaterial color={isHighLoad ? "#ef4444" : "#06b6d4"} />
+        </mesh>
+      </group>
+
+      {/* Deltoid Pull Vector (pulling humerus upwards and inwards) */}
+      <group position={[0.5, 0.4, 0]} rotation={[0, 0, 0.3 - abdRad * 0.2]}>
+        <mesh position={[0, 0.4, 0]}>
+          <cylinderGeometry args={[0.015, 0.015, 0.8, 8]} />
+          <meshBasicMaterial color="#a78bfa" />
+        </mesh>
+        <mesh position={[0, 0.8 + 0.04, 0]}>
+          <coneGeometry args={[0.05, 0.1, 8]} />
+          <meshBasicMaterial color="#a78bfa" />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+// Stereoscopic side-by-side 3D view implementation
+function StereoscopicCanvas({
+  layers,
+  motionVals,
+  heatmap,
+  planning,
+  simulationRunning,
+}: {
+  layers: Set<LayerKey>;
+  motionVals: MotionValues;
+  heatmap: boolean;
+  planning: PlanningValues;
+  simulationRunning: boolean;
 }) {
   const angleDelta = Math.abs(planning.angle - 135) / 45;
   const anteDelta = Math.abs(planning.anteversion - 20) / 20;
   const stressLevel = Math.min((angleDelta + anteDelta) / 2, 1);
-  const headRotation = motionVals.flexion * 0.35 - motionVals.extension * 0.2;
-  const headOffset = motionVals.abduction * 0.12;
-  const stressColor = stressLevel < 0.3 ? "rgba(34,197,94,0.5)" : stressLevel < 0.6 ? "rgba(234,179,8,0.5)" : "rgba(239,68,68,0.55)";
-  const stressTextColor = stressLevel < 0.3 ? "text-green-400" : stressLevel < 0.6 ? "text-yellow-400" : "text-red-400";
 
   return (
-    <div className="relative h-[360px] rounded-xl overflow-hidden border border-border/40"
-      style={{ background: "radial-gradient(ellipse at center, rgba(6,182,212,0.05) 0%, rgba(2,6,23,0.98) 70%)" }}>
-      <svg className="absolute inset-0 w-full h-full opacity-10">
-        <defs>
-          <pattern id="simgrid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(6,182,212,0.6)" strokeWidth="0.5"/>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#simgrid)" />
-      </svg>
+    <div className="grid grid-cols-2 gap-1 h-full w-full bg-black">
+      {/* Left Eye Viewport */}
+      <div className="relative border-r border-slate-800">
+        <Canvas camera={{ position: [-0.08, 0.5, 3.2], fov: 45 }}>
+          <ambientLight intensity={0.5} />
+          <pointLight position={[10, 10, 10]} intensity={1.5} />
+          <group position={[0, 0.2, 0]}>
+            <ScapulaMesh layers={layers} planning={planning} stressLevel={stressLevel} heatmap={heatmap} />
+            <HumerusMesh layers={layers} motionVals={motionVals} planning={planning} simulationRunning={simulationRunning} />
+            <SoftTissueLayers layers={layers} motionVals={motionVals} />
+            <ImpingementIndicator motionVals={motionVals} />
+            <ForceVectors motionVals={motionVals} />
+          </group>
+          <Grid renderOrder={-1} position={[0, -1.5, 0]} args={[6, 6]} cellSize={0.5} cellColor="#1e293b" sectionColor="#334155" />
+        </Canvas>
+        <span className="absolute bottom-2 left-2 text-[8px] font-mono text-white/30">LEFT EYE</span>
+      </div>
 
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative w-[260px] h-[260px]">
-          {layers.has("muscles") && (
-            <motion.div animate={simulationRunning ? { scale: [1, 1.02, 1] } : {}}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="absolute inset-4 rounded-full border-2"
-              style={{ background: "radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 80%)", borderColor: "rgba(59,130,246,0.25)", transform: `rotate(${headOffset}deg)` }} />
-          )}
-          {layers.has("muscles") && [
-            { label: "SUP", top: "8%", left: "36%", color: "rgba(139,92,246,0.4)" },
-            { label: "INF", top: "58%", left: "60%", color: "rgba(59,130,246,0.35)" },
-            { label: "TM", top: "66%", left: "40%", color: "rgba(34,197,94,0.3)" },
-            { label: "SS", top: "36%", left: "14%", color: "rgba(249,115,22,0.35)" },
-          ].map((m) => (
-            <motion.div key={m.label} className="absolute w-10 h-7 rounded-full flex items-center justify-center text-[7px] font-bold text-white/60"
-              style={{ top: m.top, left: m.left, background: m.color, border: `1px solid ${m.color}` }}
-              animate={simulationRunning ? { opacity: [0.6, 1, 0.6] } : {}}
-              transition={{ duration: 1.5, repeat: Infinity }}>
-              {m.label}
-            </motion.div>
-          ))}
-          {layers.has("tendons") && (
-            <svg className="absolute inset-0 w-full h-full" style={{ overflow: "visible" }}>
-              <line x1="60" y1="52" x2="125" y2="105" stroke="rgba(251,191,36,0.5)" strokeWidth="1.5" strokeDasharray="3,2"/>
-              <line x1="205" y1="170" x2="160" y2="142" stroke="rgba(251,191,36,0.4)" strokeWidth="1.5" strokeDasharray="3,2"/>
-              <line x1="46" y1="126" x2="110" y2="136" stroke="rgba(251,191,36,0.4)" strokeWidth="1.5" strokeDasharray="3,2"/>
-              <line x1="130" y1="55" x2="130" y2="105" stroke="rgba(248,113,113,0.4)" strokeWidth="1" strokeDasharray="4,2"/>
-            </svg>
-          )}
-          {layers.has("bones") && (
-            <div className="absolute rounded-full border-2"
-              style={{ width: 78, height: 94, top: "37%", left: "28%", background: "radial-gradient(ellipse at 40% 40%, rgba(226,232,240,0.14), rgba(148,163,184,0.05))", borderColor: "rgba(148,163,184,0.4)" }} />
-          )}
-          {layers.has("cartilage") && (
-            <div className="absolute rounded-full" style={{ width: 86, height: 102, top: "calc(37% - 4px)", left: "calc(28% - 4px)", border: "2px solid rgba(134,239,172,0.3)", boxShadow: "0 0 8px rgba(134,239,172,0.15)" }} />
-          )}
-          {layers.has("implant") && (
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              className="absolute rounded-full border border-cyan-400/50"
-              style={{ width: 70, height: 86, top: "calc(37% + 4px)", left: "calc(28% + 4px)", background: "radial-gradient(ellipse at 40% 30%, rgba(6,182,212,0.18), rgba(6,182,212,0.05))", boxShadow: "0 0 12px rgba(6,182,212,0.2)" }} />
-          )}
-          {layers.has("bones") && (
-            <motion.div
-              animate={{ x: headOffset, rotate: headRotation, y: simulationRunning ? [0, -4, 0] : 0 }}
-              transition={{ duration: simulationRunning ? 2 : 0.3, repeat: simulationRunning ? Infinity : 0, ease: simulationRunning ? "easeInOut" : "easeOut" }}
-              className="absolute rounded-full border-2"
-              style={{ width: 92, height: 92, top: "33%", left: "32%", background: "radial-gradient(circle at 35% 30%, rgba(226,232,240,0.22), rgba(148,163,184,0.08))", borderColor: "rgba(203,213,225,0.5)", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }} />
-          )}
-          {layers.has("implant") && (
-            <motion.div animate={{ x: headOffset }}
-              style={{ position: "absolute", width: 8, height: 76, top: "54%", left: "calc(46% + 4px)", background: "linear-gradient(to bottom, rgba(6,182,212,0.6), rgba(6,182,212,0.15))", borderRadius: 4, transform: `rotate(${(planning.angle - 135) * 0.3}deg)`, transformOrigin: "top" }} />
-          )}
-          {layers.has("nerves") && (
-            <svg className="absolute inset-0 w-full h-full opacity-50">
-              <path d="M 75 135 Q 95 115 130 125 Q 170 135 190 155" fill="none" stroke="rgba(250,204,21,0.6)" strokeWidth="1" strokeDasharray="4,3"/>
-              <path d="M 85 96 Q 114 90 130 104" fill="none" stroke="rgba(250,204,21,0.5)" strokeWidth="1" strokeDasharray="4,3"/>
-            </svg>
-          )}
-          {heatmap && (
-            <motion.div animate={{ opacity: [0.5, 0.85, 0.5] }} transition={{ duration: 2, repeat: Infinity }}
-              className="absolute rounded-full pointer-events-none"
-              style={{ width: 116, height: 116, top: "calc(33% - 12px)", left: "calc(32% - 12px)", background: `radial-gradient(circle at ${30 + stressLevel * 20}% ${30 + stressLevel * 20}%, ${stressColor}, transparent 70%)`, filter: "blur(5px)" }} />
-          )}
-          <svg className="absolute inset-0 w-full h-full opacity-15">
-            <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#06b6d4" strokeWidth="0.5" strokeDasharray="4,4"/>
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#06b6d4" strokeWidth="0.5" strokeDasharray="4,4"/>
-            <circle cx="50%" cy="50%" r="58" fill="none" stroke="#06b6d4" strokeWidth="0.4" strokeDasharray="3,6"/>
-          </svg>
+      {/* Right Eye Viewport */}
+      <div className="relative">
+        <Canvas camera={{ position: [0.08, 0.5, 3.2], fov: 45 }}>
+          <ambientLight intensity={0.5} />
+          <pointLight position={[10, 10, 10]} intensity={1.5} />
+          <group position={[0, 0.2, 0]}>
+            <ScapulaMesh layers={layers} planning={planning} stressLevel={stressLevel} heatmap={heatmap} />
+            <HumerusMesh layers={layers} motionVals={motionVals} planning={planning} simulationRunning={simulationRunning} />
+            <SoftTissueLayers layers={layers} motionVals={motionVals} />
+            <ImpingementIndicator motionVals={motionVals} />
+            <ForceVectors motionVals={motionVals} />
+          </group>
+          <Grid renderOrder={-1} position={[0, -1.5, 0]} args={[6, 6]} cellSize={0.5} cellColor="#1e293b" sectionColor="#334155" />
+        </Canvas>
+        <span className="absolute bottom-2 left-2 text-[8px] font-mono text-white/30">RIGHT EYE</span>
+      </div>
+    </div>
+  );
+}
+
+// Printable Pre-Operative Surgical Plan Report Modal
+function SurgicalReportModal({
+  planning,
+  motionVals,
+  patient,
+  onClose,
+}: {
+  planning: PlanningValues;
+  motionVals: MotionValues;
+  patient: typeof patients[number];
+  onClose: () => void;
+}) {
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:absolute print:inset-0 print:bg-white print:p-0"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-border/80 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] print:border-none print:shadow-none print:max-h-none print:w-full print:rounded-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20 print:hidden">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            <h3 className="font-display font-bold text-sm">Pre-Operative Planning Report</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-border/40 text-muted-foreground hover:text-foreground transition-all"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 print:overflow-visible print:p-8 text-foreground print:text-black">
+          {/* Header Block */}
+          <div className="flex justify-between items-start border-b border-border/40 pb-4">
+            <div>
+              <h2 className="text-xl font-bold font-display text-primary print:text-blue-900">ShoulderSIM AI Plan</h2>
+              <p className="text-[10px] text-muted-foreground print:text-slate-500">Generated on: May 29, 2026</p>
+            </div>
+            <div className="text-right">
+              <span className="text-xs px-2.5 py-1 rounded bg-green-500/10 border border-green-500/30 text-green-400 font-medium print:border-green-600 print:text-green-800">
+                PLAN VERIFIED
+              </span>
+            </div>
+          </div>
+
+          {/* Demographics Block */}
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="space-y-1.5">
+              <div>
+                <span className="text-muted-foreground print:text-slate-500">Patient Name:</span>{" "}
+                <span className="font-semibold">{patient.name}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground print:text-slate-500">Patient ID:</span>{" "}
+                <span className="font-mono">{patient.id}</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div>
+                <span className="text-muted-foreground print:text-slate-500">Diagnosis:</span>{" "}
+                <span className="font-semibold">{patient.diagnosis}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground print:text-slate-500">Procedure:</span>{" "}
+                <span className="font-semibold">{patient.implant}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Planning Metrics Table */}
+          <div>
+            <h4 className="text-xs font-semibold text-primary mb-2 uppercase tracking-wider print:text-blue-900">
+              Implant Alignment Details
+            </h4>
+            <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              {[
+                { label: "Inclination", val: `${planning.angle}°`, target: "135°" },
+                { label: "Anteversion", val: `${planning.anteversion}°`, target: "20°" },
+                { label: "Depth", val: `${planning.depth}mm`, target: "28mm" },
+                { label: "Humeral Offset", val: `${planning.offset}mm`, target: "0mm" },
+              ].map((m) => (
+                <div key={m.label} className="p-3 bg-muted/20 border border-border/30 rounded-xl print:bg-slate-100">
+                  <div className="font-mono font-bold text-sm text-foreground print:text-black">{m.val}</div>
+                  <div className="text-[10px] text-muted-foreground print:text-slate-500 mt-0.5">{m.label}</div>
+                  <div className="text-[8px] text-primary/70 mt-1">Target: {m.target}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Biomechanical prognosis */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl bg-card border border-border/40 space-y-2 print:bg-slate-50">
+              <h5 className="text-[11px] font-bold text-primary uppercase tracking-wider print:text-blue-900">
+                Predicted Range of Motion
+              </h5>
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Flexion:</span> <span className="font-semibold text-foreground print:text-black">138°</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Abduction:</span> <span className="font-semibold text-foreground print:text-black">124°</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>External Rotation:</span>{" "}
+                  <span className="font-semibold text-foreground print:text-black">68°</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-card border border-border/40 space-y-2 print:bg-slate-50">
+              <h5 className="text-[11px] font-bold text-primary uppercase tracking-wider print:text-blue-900">
+                Surgical Complexity Assessment
+              </h5>
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Glenoid Bone Loss:</span> <span className="text-green-400 font-semibold print:text-green-700">None</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Rotator Cuff Condition:</span> <span className="font-semibold text-foreground print:text-black">Intact</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Dislocation Probability:</span> <span className="font-mono font-semibold text-foreground print:text-black">2.1%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Surgeon sign-off block */}
+          <div className="pt-6 border-t border-border/40 grid grid-cols-2 gap-4 text-xs">
+            <div className="space-y-1">
+              <div className="text-muted-foreground print:text-slate-500">Planning Surgeon:</div>
+              <div className="font-bold">Dr. Sarah Chen, MD</div>
+              <div className="text-[10px] text-muted-foreground">Department of Orthopedic Surgery</div>
+            </div>
+            <div className="space-y-1 flex flex-col justify-end items-end">
+              <div className="w-40 border-b border-border/60 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground">
+                *CHEN SIGNATURE VALID*
+              </div>
+              <div className="text-[10px] text-muted-foreground">Electronic Approval Sign-off</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-border/60 bg-muted/15 flex items-center justify-end gap-3 print:hidden">
+          <Button variant="outline" className="text-xs" onClick={onClose}>
+            Close
+          </Button>
+          <Button className="text-xs bg-primary text-primary-foreground flex items-center gap-2" onClick={handlePrint}>
+            <Download className="w-3.5 h-3.5" /> Print / Save PDF Plan
+          </Button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="absolute top-3 left-3 text-[10px] font-mono text-primary/70 space-y-0.5">
-        <div>FLEX: {motionVals.flexion}°</div>
-        <div>ABD: {motionVals.abduction}°</div>
-        <div>ROT: {motionVals.rotation}°</div>
+function ShoulderSimViewer({
+  layers,
+  motionVals,
+  heatmap,
+  planning,
+  simulationRunning,
+  selectedPatient,
+}: {
+  layers: Set<LayerKey>;
+  motionVals: MotionValues;
+  heatmap: boolean;
+  planning: PlanningValues;
+  simulationRunning: boolean;
+  selectedPatient: number;
+}) {
+  const [viewMode, setViewMode] = useState<"3d" | "ct">("3d");
+  const [vrMode, setVrMode] = useState(false);
+  const [sliceIndex, setSliceIndex] = useState(64);
+  const [showReport, setShowReport] = useState(false);
+
+  const angleDelta = Math.abs(planning.angle - 135) / 45;
+  const anteDelta = Math.abs(planning.anteversion - 20) / 20;
+  const stressLevel = Math.min((angleDelta + anteDelta) / 2, 1);
+  const stressTextColor = stressLevel < 0.3 ? "text-green-400" : stressLevel < 0.6 ? "text-yellow-400" : "text-red-400";
+
+  // Collision state check
+  const isImpingement = motionVals.abduction < 20 || motionVals.flexion > 135;
+
+  return (
+    <div className="space-y-3">
+      {/* Simulation Engine Selector HUD */}
+      <div className="flex items-center justify-between p-2 rounded-xl bg-card border border-border/50">
+        <div className="flex gap-1">
+          <button
+            onClick={() => {
+              setViewMode("3d");
+              setVrMode(false);
+            }}
+            className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+              viewMode === "3d" && !vrMode ? "bg-primary/20 text-primary border border-primary/20" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Activity className="w-3 h-3" /> 3D Kinematics
+          </button>
+          <button
+            onClick={() => {
+              setViewMode("3d");
+              setVrMode(true);
+            }}
+            className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+              vrMode ? "bg-purple-500/20 text-purple-400 border border-purple-500/20" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Zap className="w-3 h-3" /> Stereoscopic VR
+          </button>
+          <button
+            onClick={() => setViewMode("ct")}
+            className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+              viewMode === "ct" ? "bg-primary/20 text-primary border border-primary/20" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Sliders className="w-3 h-3" /> 2D CT Slices (MPR)
+          </button>
+        </div>
+        <Button
+          size="sm"
+          className="h-7 text-[9px] font-bold bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30"
+          onClick={() => setShowReport(true)}
+        >
+          <FileText className="w-3 h-3 mr-1" /> Planning Report
+        </Button>
       </div>
-      <div className="absolute top-3 right-3 text-[10px] font-mono text-right space-y-0.5">
-        <div className="text-primary/70">ANG: {planning.angle}°</div>
-        <div className="text-primary/70">ANT: {planning.anteversion}°</div>
-        <div className={`font-bold ${stressTextColor}`}>STRESS: {Math.round(stressLevel * 100)}%</div>
+
+      {/* Main Viewport */}
+      <div
+        className="relative h-[360px] rounded-xl overflow-hidden border border-border/40"
+        style={{ background: "radial-gradient(ellipse at center, rgba(15,23,42,0.95) 0%, rgba(2,6,23,1.0) 100%)" }}
+      >
+        {vrMode ? (
+          <StereoscopicCanvas
+            layers={layers}
+            motionVals={motionVals}
+            heatmap={heatmap}
+            planning={planning}
+            simulationRunning={simulationRunning}
+          />
+        ) : viewMode === "ct" ? (
+          <div className="p-3 h-full flex flex-col justify-between">
+            <div className="flex-1 min-h-0">
+              <CtSliceViewer sliceIndex={sliceIndex} planning={planning} layers={layers} />
+            </div>
+            <div className="mt-2.5 flex items-center gap-3">
+              <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">CT Depth (Slice):</span>
+              <input
+                type="range"
+                min={1}
+                max={128}
+                value={sliceIndex}
+                onChange={(e) => setSliceIndex(Number(e.target.value))}
+                className="w-full h-1.5 appearance-none rounded-full bg-border/50 cursor-pointer accent-primary"
+              />
+              <span className="text-[9px] font-mono font-bold text-primary w-8">{sliceIndex}/128</span>
+            </div>
+          </div>
+        ) : (
+          <Canvas camera={{ position: [0, 0.5, 3.2], fov: 45 }}>
+            <color attach="background" args={["#030712"]} />
+            <ambientLight intensity={0.5} />
+            <pointLight position={[10, 10, 10]} intensity={1.5} />
+            <spotLight position={[-10, 15, -10]} angle={0.3} penumbra={1} intensity={1} castShadow />
+
+            <group position={[0, 0.2, 0]}>
+              <ScapulaMesh layers={layers} planning={planning} stressLevel={stressLevel} heatmap={heatmap} />
+              <HumerusMesh layers={layers} motionVals={motionVals} planning={planning} simulationRunning={simulationRunning} />
+              <SoftTissueLayers layers={layers} motionVals={motionVals} />
+              <ImpingementIndicator motionVals={motionVals} />
+              <ForceVectors motionVals={motionVals} />
+            </group>
+
+            {/* HUD visual grids */}
+            <Grid
+              renderOrder={-1}
+              position={[0, -1.5, 0]}
+              args={[10, 10]}
+              cellSize={0.5}
+              cellThickness={0.5}
+              cellColor="#1e293b"
+              sectionSize={2}
+              sectionThickness={1}
+              sectionColor="#334155"
+            />
+            <OrbitControls enableZoom={true} enablePan={true} maxPolarAngle={Math.PI / 2 + 0.1} minDistance={1.5} maxDistance={6} />
+          </Canvas>
+        )}
+
+        {/* Impingement detection warning badge overlay */}
+        {isImpingement && viewMode === "3d" && (
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-[9px] text-red-400 font-mono pointer-events-none">
+            <AlertTriangle className="w-3.5 h-3.5" /> BONE IMPINGEMENT DETECTED AT NECK JUNCTION
+          </div>
+        )}
+
+        <div className="absolute top-3 left-3 text-[10px] font-mono text-primary/70 space-y-0.5 pointer-events-none">
+          <div>FLEX: {motionVals.flexion}°</div>
+          <div>ABD: {motionVals.abduction}°</div>
+          <div>ROT: {motionVals.rotation}°</div>
+        </div>
+        <div className="absolute top-3 right-3 text-[10px] font-mono text-right space-y-0.5 pointer-events-none">
+          <div className="text-primary/70">ANG: {planning.angle}°</div>
+          <div className="text-primary/70">ANT: {planning.anteversion}°</div>
+          <div className={`font-bold ${stressTextColor}`}>STRESS: {Math.round(stressLevel * 100)}%</div>
+        </div>
+        {simulationRunning && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-[10px] font-mono text-primary pointer-events-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> SIM RUNNING
+          </div>
+        )}
       </div>
-      {simulationRunning && (
-        <motion.div animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }}
-          className="absolute bottom-3 left-3 flex items-center gap-1.5 text-[10px] font-mono text-primary">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SIM RUNNING
-        </motion.div>
+
+      {showReport && (
+        <SurgicalReportModal
+          planning={planning}
+          motionVals={motionVals}
+          patient={patients[selectedPatient]}
+          onClose={() => setShowReport(false)}
+        />
       )}
     </div>
   );
 }
+
 
 function AIAdvisorTab({ planning }: { planning: PlanningValues }) {
   const [voiceActive, setVoiceActive] = useState(false);
@@ -420,7 +1185,8 @@ export default function SimulationPage() {
     { id: "comp", label: "Complications", icon: AlertTriangle },
     { id: "recovery", label: "Recovery", icon: TrendingUp },
     { id: "planning", label: "Planning", icon: Sliders },
-    { id: "failure", label: "Failure Sim", icon: AlertCircle },
+    { id: "stability", label: "Stability Test", icon: Shield },
+  { id: "wear", label: "Wear Sim", icon: Wrench },
   ];
 
   const layerConfig: { key: LayerKey; label: string; color: string }[] = [
@@ -532,7 +1298,8 @@ export default function SimulationPage() {
                   {activeTab === "comp" && <ComplicationsTab planning={planning} />}
                   {activeTab === "recovery" && <RecoveryTab />}
                   {activeTab === "planning" && <PlanningTab planning={planning} setPlanningValues={setPlanningValues} />}
-                  {activeTab === "failure" && <FailureSimTab planning={planning} />}
+                  {activeTab === "stability" && <StabilityTab planning={planning} />}
+                  {activeTab === "wear" && <WearSimulationTab planning={planning} />}
                 </motion.div>
               </AnimatePresence>
             </div>

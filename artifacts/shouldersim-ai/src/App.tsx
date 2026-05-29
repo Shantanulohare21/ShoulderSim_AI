@@ -7,7 +7,8 @@ import Home from "@/pages/Home";
 import SimulationPage from "@/pages/SimulationPage";
 import ImplantLibraryPage from "@/pages/ImplantLibraryPage";
 import DashboardPage from "@/pages/DashboardPage";
-import { useEffect } from "react";
+import SurgeonTrainingPage from "@/pages/SurgeonTrainingPage";
+import { useState, useEffect } from "react";
 
 const queryClient = new QueryClient();
 
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/simulation" component={SimulationPage} />
       <Route path="/implants" component={ImplantLibraryPage} />
+      <Route path="/training" component={SurgeonTrainingPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route component={NotFound} />
     </Switch>
