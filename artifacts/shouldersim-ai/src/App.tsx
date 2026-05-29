@@ -4,6 +4,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import SimulationPage from "@/pages/SimulationPage";
+import ImplantLibraryPage from "@/pages/ImplantLibraryPage";
+import DashboardPage from "@/pages/DashboardPage";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -12,13 +15,15 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/simulation" component={SimulationPage} />
+      <Route path="/implants" component={ImplantLibraryPage} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
 function App() {
-  // Force dark mode
   useEffect(() => {
     document.documentElement.classList.add("dark");
   }, []);

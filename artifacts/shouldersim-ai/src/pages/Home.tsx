@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
+import { Link } from "wouter";
 import {
   Activity, Brain, Cpu, Database, Eye, Stethoscope, ChevronRight, Play,
   Moon, Sun, Zap, Shield, TrendingUp, Users, Building2, Award, ArrowRight,
@@ -223,7 +224,12 @@ function Navbar({ isDark, toggle }: { isDark: boolean; toggle: () => void }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const links = ["Platform", "Features", "Workflow", "Implants", "Research", "Contact"];
+  const anchorLinks = ["Features", "Workflow", "Research", "Contact"];
+  const pageLinks = [
+    { label: "Simulation", href: "/simulation" },
+    { label: "Implant Library", href: "/implants" },
+    { label: "Dashboard", href: "/dashboard" },
+  ];
 
   return (
     <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? "border-b border-border/60 bg-background/80 backdrop-blur-xl" : "bg-transparent"}`}>
@@ -237,12 +243,19 @@ function Navbar({ isDark, toggle }: { isDark: boolean; toggle: () => void }) {
           </span>
         </div>
 
-        <div className="hidden lg:flex items-center gap-8 text-sm font-medium">
-          {links.map(l => (
+        <div className="hidden lg:flex items-center gap-6 text-sm font-medium">
+          {anchorLinks.map(l => (
             <a key={l} href={`#${l.toLowerCase()}`} className="text-muted-foreground hover:text-foreground transition-colors relative group">
               {l}
               <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-primary transition-all group-hover:w-full" />
             </a>
+          ))}
+          <div className="w-px h-4 bg-border/50" />
+          {pageLinks.map(pl => (
+            <Link key={pl.href} href={pl.href} className="text-primary/80 hover:text-primary transition-colors relative group font-medium">
+              {pl.label}
+              <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-primary transition-all group-hover:w-full" />
+            </Link>
           ))}
         </div>
 
@@ -257,9 +270,9 @@ function Navbar({ isDark, toggle }: { isDark: boolean; toggle: () => void }) {
           <Button variant="outline" className="hidden sm:inline-flex text-sm border-border/50 hover:border-primary/50" data-testid="button-signin">
             Sign In
           </Button>
-          <Button className="text-sm bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(6,182,212,0.3)]" data-testid="button-request-demo">
-            Request Demo
-          </Button>
+          <Link href="/simulation" className="inline-flex items-center justify-center px-4 h-9 rounded-lg text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-colors" data-testid="button-request-demo">
+            Launch Platform
+          </Link>
           <button className="lg:hidden" onClick={() => setMenuOpen(o => !o)} data-testid="button-mobile-menu">
             <div className="w-5 h-0.5 bg-foreground mb-1" />
             <div className="w-5 h-0.5 bg-foreground mb-1" />
@@ -274,10 +287,15 @@ function Navbar({ isDark, toggle }: { isDark: boolean; toggle: () => void }) {
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             className="lg:hidden bg-background/95 backdrop-blur-xl border-b border-border/60 px-6 pb-4"
           >
-            {links.map(l => (
-              <a key={l} href={`#${l.toLowerCase()}`} onClick={() => setMenuOpen(false)} className="block py-3 text-sm text-muted-foreground hover:text-foreground border-b border-border/30 last:border-0">
+            {anchorLinks.map(l => (
+              <a key={l} href={`#${l.toLowerCase()}`} onClick={() => setMenuOpen(false)} className="block py-3 text-sm text-muted-foreground hover:text-foreground border-b border-border/30">
                 {l}
               </a>
+            ))}
+            {pageLinks.map(pl => (
+              <Link key={pl.href} href={pl.href} onClick={() => setMenuOpen(false)} className="block py-3 text-sm text-primary hover:text-primary/80 border-b border-border/30 last:border-0 font-medium">
+                {pl.label} →
+              </Link>
             ))}
           </motion.div>
         )}
@@ -1492,6 +1510,331 @@ function Contact() {
   );
 }
 
+/* ─────────── DIGITAL TWIN SECTION ─────────── */
+function DigitalTwin() {
+  const ref = useRef<HTMLElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const [activeLayer, setActiveLayer] = useState(0);
+  const layers = [
+    { label: "Bone Structure", color: "text-slate-300", bg: "bg-slate-400/20 border-slate-400/40", desc: "Patient-specific cortical and trabecular bone geometry extracted from CT scan with ±0.3mm precision." },
+    { label: "Muscle Groups", color: "text-blue-400", bg: "bg-blue-500/20 border-blue-500/40", desc: "Volumetric muscle models with fiber direction tracking — deltoid, rotator cuff, biceps, triceps." },
+    { label: "Cartilage Layer", color: "text-green-400", bg: "bg-green-500/20 border-green-500/40", desc: "T2 MRI mapping identifies cartilage thickness (0.5–3mm) and degeneration zones across the glenohumeral joint." },
+    { label: "Neural Pathways", color: "text-yellow-400", bg: "bg-yellow-500/20 border-yellow-500/40", desc: "Axillary nerve, brachial plexus proximity mapped for surgical safety zones. Collision detection enabled." },
+    { label: "Vascular Map", color: "text-red-400", bg: "bg-red-500/20 border-red-500/40", desc: "Anterior circumflex humeral artery and venous drainage mapped from 3D angiogram overlay." },
+    { label: "Implant Virtual", color: "text-primary", bg: "bg-primary/20 border-primary/40", desc: "Proposed implant rendered into patient anatomy with stress simulation at bone-implant interface." },
+  ];
+
+  return (
+    <section ref={ref} className="py-28 relative overflow-hidden" id="digital-twin">
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/3 to-background pointer-events-none" />
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div initial="hidden" animate={inView ? "visible" : "hidden"} variants={stagger}>
+            <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-medium mb-6">
+              <Scan className="w-3.5 h-3.5" />Patient-Specific Digital Twin
+            </motion.div>
+            <motion.h2 variants={fadeUp} className="text-4xl md:text-5xl font-display font-bold leading-tight mb-6">
+              Every patient is <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-primary">anatomically unique.</span>
+            </motion.h2>
+            <motion.p variants={fadeUp} className="text-muted-foreground leading-relaxed mb-8">
+              ShoulderSIM AI creates a precise 3D digital replica of each patient's shoulder — bones, cartilage, muscles, nerves, and vasculature — reconstructed from DICOM data. Surgeons plan on the actual patient, not a generic atlas.
+            </motion.p>
+            <motion.div variants={stagger} className="space-y-2">
+              {layers.map((l, i) => (
+                <motion.button key={l.label} variants={fadeUp} onClick={() => setActiveLayer(i)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${activeLayer === i ? `${l.bg} ${l.color}` : "bg-card/30 border-border/40 text-muted-foreground hover:text-foreground hover:border-border/60"}`}>
+                  <span className={`w-2 h-2 rounded-full ${activeLayer === i ? "bg-current" : "bg-border/60"}`} />
+                  <span className="text-sm font-medium">{l.label}</span>
+                  {activeLayer === i && <ChevronRight className="w-3.5 h-3.5 ml-auto" />}
+                </motion.button>
+              ))}
+            </motion.div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={inView ? { opacity: 1, scale: 1 } : {}} transition={{ duration: 0.8 }}>
+            <div className="relative bg-card/40 border border-border/60 rounded-2xl p-6 backdrop-blur-sm">
+              {/* Mock CT-scan style viewer */}
+              <div className="bg-slate-950/80 rounded-xl overflow-hidden mb-4" style={{ height: 300, background: "radial-gradient(ellipse, rgba(139,92,246,0.06), rgba(0,0,0,0.95))" }}>
+                <div className="relative h-full flex items-center justify-center">
+                  <svg className="absolute inset-0 w-full h-full opacity-10">
+                    <defs><pattern id="twingrid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(139,92,246,0.5)" strokeWidth="0.4"/></pattern></defs>
+                    <rect width="100%" height="100%" fill="url(#twingrid)" />
+                  </svg>
+                  {/* Simplified anatomy layers */}
+                  <div className="relative w-[220px] h-[220px]">
+                    {activeLayer >= 0 && <div className="absolute inset-6 rounded-full border-2 border-slate-400/30" style={{ background: "rgba(226,232,240,0.05)" }} />}
+                    {activeLayer >= 1 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-2 rounded-full border border-blue-500/30" style={{ background: "rgba(59,130,246,0.06)" }} />}
+                    {activeLayer >= 2 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute" style={{ width: 80, height: 96, top: "35%", left: "27%", border: "1.5px solid rgba(34,197,94,0.4)", borderRadius: "50%", background: "rgba(34,197,94,0.06)" }} />}
+                    {activeLayer >= 3 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                      <svg className="absolute inset-0 w-full h-full"><path d="M 80 130 Q 100 110 130 120 Q 160 130 175 150" fill="none" stroke="rgba(250,204,21,0.5)" strokeWidth="1.5" strokeDasharray="4,3"/></svg>
+                    </motion.div>}
+                    {activeLayer >= 4 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                      <svg className="absolute inset-0 w-full h-full"><path d="M 95 88 Q 120 84 132 96 Q 144 108 140 124" fill="none" stroke="rgba(248,113,113,0.5)" strokeWidth="2"/></svg>
+                    </motion.div>}
+                    {activeLayer >= 5 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute" style={{ width: 70, height: 86, top: "calc(35% + 5px)", left: "calc(27% + 5px)", border: "1.5px solid rgba(6,182,212,0.5)", borderRadius: "50%", background: "rgba(6,182,212,0.08)", boxShadow: "0 0 12px rgba(6,182,212,0.2)" }} />}
+                    {/* Core humeral head */}
+                    <div className="absolute w-20 h-20 rounded-full" style={{ top: "31%", left: "31%", background: "radial-gradient(circle at 35% 30%, rgba(226,232,240,0.18), rgba(148,163,184,0.05))", border: "1.5px solid rgba(148,163,184,0.5)" }} />
+                  </div>
+                  <div className="absolute top-3 left-3 text-[9px] font-mono text-violet-400/70 space-y-0.5">
+                    <div>PATIENT: P-2024-0142</div>
+                    <div>LAYER: {layers[activeLayer].label.toUpperCase()}</div>
+                  </div>
+                </div>
+              </div>
+              <AnimatePresence mode="wait">
+                <motion.div key={activeLayer} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`p-3 rounded-lg border ${layers[activeLayer].bg}`}>
+                  <div className={`text-xs font-semibold mb-1 ${layers[activeLayer].color}`}>{layers[activeLayer].label}</div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{layers[activeLayer].desc}</p>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────── VOICE ASSISTANT SECTION ─────────── */
+function VoiceAssistant() {
+  const ref = useRef<HTMLElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const [isActive, setIsActive] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [response, setResponse] = useState("");
+  const [typingResponse, setTypingResponse] = useState(false);
+
+  const demoQueries = [
+    { q: "What's the dislocation risk for patient P-0142 with current implant placement?", a: "Dislocation risk for P-0142 is currently 23.4% — elevated due to 8° deviation from optimal inclination. Recommend adjusting from 143° to 135°. Risk reduces to 14.1% with correction." },
+    { q: "Show me all reverse shoulder implants with >92% success rate", a: "Found 2 implants matching criteria: Arthrex IDES Reverse (92.9% success, AI score 92) and Zimmer Comprehensive Reverse (92.3%, score 93). Both available in your implant library." },
+    { q: "Generate PDF report for today's planned cases", a: "Generating surgical planning reports for 3 cases: P-0142 (TSA), P-0138 (RSA), P-0129 (Resurfacing). Reports include AI analysis, risk scores, and implant specs. Ready in ~12 seconds." },
+  ];
+  const [queryIdx, setQueryIdx] = useState(0);
+
+  const runDemo = () => {
+    if (isActive) return;
+    setIsActive(true);
+    const demo = demoQueries[queryIdx % demoQueries.length];
+    setTranscript(""); setResponse("");
+    let i = 0;
+    const t1 = setInterval(() => { i++; setTranscript(demo.q.slice(0, i)); if (i >= demo.q.length) clearInterval(t1); }, 30);
+    setTimeout(() => {
+      setTypingResponse(true);
+      setTimeout(() => {
+        setTypingResponse(false);
+        let j = 0;
+        const t2 = setInterval(() => { j++; setResponse(demo.a.slice(0, j)); if (j >= demo.a.length) { clearInterval(t2); setIsActive(false); setQueryIdx(q => q + 1); } }, 15);
+      }, 1000);
+    }, demo.q.length * 30 + 400);
+  };
+
+  return (
+    <section ref={ref} className="py-28 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-secondary/3 to-background pointer-events-none" />
+      <div className="max-w-7xl mx-auto px-6">
+        <motion.div initial="hidden" animate={inView ? "visible" : "hidden"} variants={stagger} className="text-center mb-16">
+          <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium mb-6">
+            <Radio className="w-3.5 h-3.5" />Voice Command Intelligence
+          </motion.div>
+          <motion.h2 variants={fadeUp} className="text-4xl md:text-5xl font-display font-bold mb-6">
+            Surgical intelligence at the <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">speed of speech.</span>
+          </motion.h2>
+          <motion.p variants={fadeUp} className="text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            The ShoulderSIM AI voice assistant understands clinical language. Query risk scores, pull implant data, generate reports, and control simulations — all hands-free.
+          </motion.p>
+        </motion.div>
+
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div initial={{ opacity: 0, x: -30 }} animate={inView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.7 }}>
+            <div className="bg-card/50 border border-border/60 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs font-mono text-muted-foreground">VOICE INTERFACE — READY</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground font-mono">ShoulderSIM v2.0</span>
+              </div>
+
+              {/* Waveform visualization */}
+              <div className="flex items-center justify-center gap-1 h-16 mb-5">
+                {Array.from({ length: 28 }, (_, i) => (
+                  <motion.div key={i}
+                    className="w-1.5 rounded-full bg-primary/60"
+                    animate={isActive ? { height: [4, Math.random() * 32 + 8, 4] } : { height: 4 }}
+                    transition={{ duration: 0.4 + Math.random() * 0.3, repeat: isActive ? Infinity : 0, delay: i * 0.04, ease: "easeInOut" }}
+                    style={{ minHeight: 4 }}
+                  />
+                ))}
+              </div>
+
+              {/* Transcript */}
+              <div className="mb-4 min-h-[60px]">
+                {transcript && (
+                  <div className="p-3 rounded-lg bg-background/60 border border-border/40 mb-3">
+                    <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Radio className="w-3 h-3 text-primary" />SURGEON</div>
+                    <p className="text-sm text-foreground">{transcript}</p>
+                  </div>
+                )}
+                {(typingResponse || response) && (
+                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="text-[10px] text-primary mb-1 flex items-center gap-1"><Brain className="w-3 h-3" />AI ASSISTANT</div>
+                    {typingResponse ? (
+                      <div className="flex items-center gap-1">
+                        {[0.1, 0.2, 0.3].map(d => (
+                          <motion.div key={d} animate={{ y: [-2, 2, -2] }} transition={{ duration: 0.5, repeat: Infinity, delay: d }} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground leading-relaxed">{response}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={runDemo} disabled={isActive}
+                className={`w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-all ${isActive ? "bg-primary/10 text-primary border border-primary/30" : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(6,182,212,0.3)]"}`}>
+                {isActive ? <><Radio className="w-4 h-4 animate-pulse" />Listening…</> : <>▶ Try Demo Query</>}
+              </button>
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, x: 30 }} animate={inView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.7, delay: 0.2 }}>
+            <div className="space-y-4">
+              {[
+                { cmd: "\"Simulate flexion to 160 degrees\"", result: "Motion simulation updated — stress increases 12% in supraspinatus region at 160°", icon: RefreshCw },
+                { cmd: "\"What implants work with poor bone quality?\"", result: "4 implants match: SMR Reverse (Tantalum), Equinoxe Reverse, ReUnion RSA, HemiCAP Partial", icon: Database },
+                { cmd: "\"Export surgical report for all today's cases\"", result: "3 PDF reports generated: P-0142, P-0138, P-0129 — sent to OR planning system", icon: FileText },
+                { cmd: "\"Set anteversion to 18 degrees\"", result: "Glenoid anteversion updated 20° → 18°. Dislocation risk reduced by 2.3%", icon: Target },
+              ].map((item) => (
+                <div key={item.cmd} className="flex gap-4 p-4 bg-card/40 border border-border/50 rounded-xl hover:border-primary/30 transition-all">
+                  <item.icon className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-sm font-mono text-primary mb-1">{item.cmd}</div>
+                    <div className="text-[11px] text-muted-foreground leading-relaxed">{item.result}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────── IMPLANT FAILURE SECTION ─────────── */
+function ImplantFailureSection() {
+  const ref = useRef<HTMLElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const [activeMode, setActiveMode] = useState(0);
+
+  const failureModes = [
+    { label: "Superior Migration", risk: 28, severity: "Moderate", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/30", desc: "Rotator cuff tear allows superior humeral head displacement. Detected via humeral head–acromion distance < 7mm threshold.", finding: "Supraspinatus integrity < 40% — migration risk elevated" },
+    { label: "Glenoid Loosening", risk: 18, severity: "Low", color: "text-green-400", bg: "bg-green-500/10 border-green-500/30", desc: "Eccentric loading pattern creates cyclical stress at the bone-cement interface — the 'rocking horse' phenomenon.", finding: "Eccentric loading index: 0.14 — within safe zone" },
+    { label: "Stress Fracture", risk: 44, severity: "High", color: "text-red-400", bg: "bg-red-500/10 border-red-500/30", desc: "Periprosthetic fracture risk at humeral stem tip. T-score -2.1 creates elevated cortical thinning susceptibility.", finding: "Cortical bone thickness 2.1mm — below 3mm safety threshold" },
+    { label: "Polyethylene Wear", risk: 12, severity: "Low", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/30", desc: "UHMWPE bearing surface wear estimated at 0.09mm/yr based on joint kinematics and patient activity level.", finding: "Projected 20yr wear: 1.8mm — within ASTM limits" },
+  ];
+
+  return (
+    <section ref={ref} className="py-28 relative overflow-hidden" id="failure-analysis">
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-red-950/5 to-background pointer-events-none" />
+      <div className="max-w-7xl mx-auto px-6">
+        <motion.div initial="hidden" animate={inView ? "visible" : "hidden"} variants={stagger} className="text-center mb-16">
+          <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium mb-6">
+            <AlertTriangle className="w-3.5 h-3.5" />Implant Failure Simulation
+          </motion.div>
+          <motion.h2 variants={fadeUp} className="text-4xl md:text-5xl font-display font-bold mb-6">
+            Predict failure. <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">Before it happens.</span>
+          </motion.h2>
+          <motion.p variants={fadeUp} className="text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            ShoulderSIM AI simulates every known failure mode — stress concentrations, loosening, migration, and wear — using patient-specific bone quality scores and biomechanical models validated against 142K+ surgical outcomes.
+          </motion.p>
+        </motion.div>
+
+        <div className="grid lg:grid-cols-2 gap-12 items-start">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.7 }}>
+            <div className="space-y-3">
+              {failureModes.map((f, i) => (
+                <button key={f.label} onClick={() => setActiveMode(i)}
+                  className={`w-full flex items-start gap-4 p-4 rounded-xl border text-left transition-all ${activeMode === i ? f.bg : "bg-card/40 border-border/50 hover:border-border/80"}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold font-mono ${activeMode === i ? f.color : "text-muted-foreground"} bg-background/50`}>
+                    {f.risk}%
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-sm font-semibold ${activeMode === i ? f.color : "text-foreground"}`}>{f.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${activeMode === i ? f.bg : "bg-border/30 border-border/40 text-muted-foreground"}`}>{f.severity}</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-2">{f.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.7, delay: 0.15 }}>
+            <AnimatePresence mode="wait">
+              <motion.div key={activeMode} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}
+                className="bg-card/50 border border-border/60 rounded-2xl p-6 backdrop-blur-sm sticky top-24">
+
+                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border mb-5 ${failureModes[activeMode].bg} ${failureModes[activeMode].color}`}>
+                  <AlertTriangle className="w-3.5 h-3.5" />{failureModes[activeMode].label} — {failureModes[activeMode].severity} Risk
+                </div>
+
+                {/* Stress visualization */}
+                <div className="h-[180px] rounded-xl mb-5 relative overflow-hidden flex items-center justify-center"
+                  style={{ background: `radial-gradient(ellipse at 50% 50%, rgba(${activeMode === 2 ? "239,68,68" : activeMode === 0 ? "234,179,8" : "6,182,212"},0.06), rgba(0,0,0,0.9))` }}>
+                  <svg className="absolute inset-0 w-full h-full opacity-10">
+                    <defs><pattern id="failgrid" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M 18 0 L 0 0 0 18" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.3"/></pattern></defs>
+                    <rect width="100%" height="100%" fill="url(#failgrid)" />
+                  </svg>
+                  <div className="relative w-[140px] h-[140px]">
+                    {/* Base anatomy */}
+                    <div className="absolute w-14 h-14 rounded-full border border-slate-500/40" style={{ top: "30%", left: "25%", background: "rgba(148,163,184,0.06)" }} />
+                    <div className="absolute w-18 h-20 rounded-full border border-slate-400/30" style={{ width: 72, height: 80, top: "22%", left: "21%", background: "rgba(148,163,184,0.04)" }} />
+                    {/* Humeral head */}
+                    <div className="absolute w-16 h-16 rounded-full border border-slate-400/50" style={{ top: "28%", left: "28%", background: "rgba(203,213,225,0.08)" }} />
+                    {/* Failure zone */}
+                    <motion.div
+                      animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="absolute rounded-full"
+                      style={{
+                        width: 36, height: 36,
+                        top: activeMode === 0 ? "15%" : activeMode === 1 ? "42%" : activeMode === 2 ? "58%" : "38%",
+                        left: activeMode === 0 ? "36%" : activeMode === 1 ? "28%" : activeMode === 2 ? "44%" : "52%",
+                        background: `radial-gradient(circle, ${activeMode === 2 ? "rgba(239,68,68,0.4)" : activeMode === 0 ? "rgba(234,179,8,0.35)" : "rgba(59,130,246,0.3)"}, transparent)`,
+                        border: `1px solid ${activeMode === 2 ? "rgba(239,68,68,0.5)" : activeMode === 0 ? "rgba(234,179,8,0.45)" : "rgba(59,130,246,0.4)"}`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Risk meter */}
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs mb-2">
+                    <span className="text-muted-foreground">Failure Probability</span>
+                    <span className={`font-bold font-mono ${failureModes[activeMode].color}`}>{failureModes[activeMode].risk}%</span>
+                  </div>
+                  <div className="h-2 bg-border/40 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${failureModes[activeMode].risk}%` }} transition={{ duration: 0.8 }}
+                      className={`h-full rounded-full ${activeMode === 2 ? "bg-red-500" : activeMode === 0 ? "bg-yellow-500" : "bg-primary"}`} />
+                  </div>
+                </div>
+
+                <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${failureModes[activeMode].bg} ${failureModes[activeMode].color}`}>
+                  <div className="font-semibold mb-1">AI Finding</div>
+                  <div className="text-muted-foreground">{failureModes[activeMode].finding}</div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─────────── FOOTER ─────────── */
 function Footer() {
   const links = {
@@ -1571,6 +1914,9 @@ export default function Home() {
         <Benefits />
         <TechStack />
         <Research />
+        <DigitalTwin />
+        <ImplantFailureSection />
+        <VoiceAssistant />
         <Contact />
       </main>
       <Footer />
